@@ -1,47 +1,40 @@
-
 import io.restassured.response.Response;
+import model.AuthRequest;
+import model.UserRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.*;
 
 public class UserRegistrationTest extends BaseClassTest {
 
     @Test
     @DisplayName("Создание уникального пользователя")
     public void createUniqueUserSuccessfully() {
-        UserRequest user = new UserRequest("Boiko89@test.ru", "Boiko891", "Viktor");
-        Response response = createUser(user);
-
-        response.then()
-                .statusCode(200)
-                .body("success", equalTo(true))
-                .body("user.email", equalTo(user.getEmail().toLowerCase()))
-                .body("user.name", equalTo(user.getName()));
-
-
+        UserRequest user = createRandomUser();
+        Response response = userApi.createUser(user);
+        verifySuccessResponse(response);
+        this.accessToken = response.path("accessToken");
     }
 
     @Test
     @DisplayName("Создание уже существующего пользователя")
     public void createExistingUserFails() {
-        UserRequest user = new UserRequest("Boiko90@test.ru", "Boiko891", "Ivan");
-        //Создание уникального пользователя
-        createUser(user);
-        //Создание пользователя с такими же данными
-        Response duplicateResponse  = createUser(user);
+        UserRequest user = createRandomUser();
+        registerUser(user);
 
-        duplicateResponse .then()
+        Response duplicateResponse = userApi.createUser(user);
+        duplicateResponse.then()
                 .statusCode(403)
                 .body("success", equalTo(false))
                 .body("message", equalTo("User already exists"));
-
     }
 
     @Test
     @DisplayName("Создание пользователя без email")
     public void createUserWithoutEmailFails() {
-        UserRequest user = new UserRequest(null, "Boiko891", "Samanta");
-        Response response = createUser(user);
+        Response response = userApi.createUser(
+                new UserRequest(null, faker.internet().password(), faker.name().fullName())
+        );
 
         response.then()
                 .statusCode(403)
@@ -52,8 +45,9 @@ public class UserRegistrationTest extends BaseClassTest {
     @Test
     @DisplayName("Создание пользователя без пароля")
     public void createUserWithoutPasswordFails() {
-        UserRequest user = new UserRequest("Harry@test.ru",null,"Harry");
-        Response response = createUser(user);
+        Response response = userApi.createUser(
+                new UserRequest(faker.internet().emailAddress(), null, faker.name().fullName())
+        );
 
         response.then()
                 .statusCode(403)
@@ -63,15 +57,15 @@ public class UserRegistrationTest extends BaseClassTest {
 
     @Test
     @DisplayName("Создание пользователя без имени")
-    public void createUserWithoutNameFails(){
-        UserRequest user = new UserRequest("Dava@test.ru","David123",null);
-        Response response = createUser(user);
+    public void createUserWithoutNameFails() {
+        Response response = userApi.createUser(
+                new UserRequest(faker.internet().emailAddress(), faker.internet().password(), null)
+        );
+
 
         response.then()
                 .statusCode(403)
                 .body("success", equalTo(false))
-                .body("message",equalTo("Email, password and name are required fields"));
+                .body("message", equalTo("Email, password and name are required fields"));
     }
-
-
 }

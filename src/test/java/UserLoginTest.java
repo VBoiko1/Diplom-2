@@ -1,60 +1,54 @@
 import io.restassured.response.Response;
+import model.AuthRequest;
+import model.UserRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
-import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 
 public class UserLoginTest extends BaseClassTest {
 
     @Test
     @DisplayName("Успешная авторизация")
-    public void successfulLoginTest(){
-        UserRequest user = new UserRequest("Frodo@test.ru","RingIsMy1","Frodo");
-        createUser(user);
+    public void successfulLoginTest() {
+        UserRequest user = createRandomUser();
+        registerUser(user);
 
-        Response loginResponse = loginUser(user.getEmail(), user.getPassword());
-
-        loginResponse.then()
-                .statusCode(200)
-                .body("success",equalTo(true))
-                .body("accessToken", startsWith("Bearer "))
-                .body("refreshToken",not(emptyString()))
-                .body("user.email",equalTo(user.getEmail().toLowerCase()))
-                .body("user.name", equalTo(user.getName()));
+        Response loginResponse = userApi.loginUser(new AuthRequest(user.getEmail(), user.getPassword()));
+        verifySuccessResponse(loginResponse);
+        this.accessToken = loginResponse.path("accessToken");
     }
 
     @Test
     @DisplayName("Авторизация с неверным email")
-    public void loginWithInvalidEmail(){
-        UserRequest user = new UserRequest("Stenli@test.ru","Qwerty89","Sten");
-        createUser(user);
+    public void loginWithInvalidEmail() {
+        UserRequest user = createRandomUser();
+        registerUser(user);
 
-        given()
-                .header("Content-type","application/json")
-                .body(new AuthRequest("Stepan@test.ru",user.getPassword()))
-                .when()
-                .post("/auth/login")
-                .then()
+        Response response = userApi.loginUser(new AuthRequest(
+                faker.internet().emailAddress(),
+                user.getPassword()
+        ));
+
+        response.then()
                 .statusCode(401)
-                .body("success",equalTo(false))
-                .body("message",equalTo("email or password are incorrect"));
+                .body("success", equalTo(false))
+                .body("message", equalTo("email or password are incorrect"));
     }
 
     @Test
     @DisplayName("Авторизация с неверным паролем")
-    public void loginWithInvalidPassword(){
-        UserRequest user = new UserRequest("Tom@test.ru","Moscow89","Tomoson");
-        createUser(user);
+    public void loginWithInvalidPassword() {
+        UserRequest user = createRandomUser();
+        registerUser(user);
 
-        given()
-                .header("Content-type","application/json")
-                .body(new AuthRequest(user.getEmail(), "QWerty67"))
-                .when()
-                .post("/auth/login")
-                .then()
+        Response response = userApi.loginUser(new AuthRequest(
+                user.getEmail(),
+                faker.internet().password()
+        ));
+
+        response.then()
                 .statusCode(401)
-                .body("success",equalTo(false))
-                .body("message",equalTo("email or password are incorrect"));
+                .body("success", equalTo(false))
+                .body("message", equalTo("email or password are incorrect"));
     }
 }

@@ -1,88 +1,104 @@
+import api.OrderApiClient;
+import api.UserApiClient;
+import com.github.javafaker.Faker;
 import io.qameta.allure.Step;
-import io.restassured.RestAssured;
 import io.restassured.response.Response;
+import model.AuthRequest;
+import model.UserRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
-
-import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.*;
 
 public class BaseClassTest {
-    protected static final String BASE_URL = "https://stellarburgers.nomoreparties.site/api";
+    protected UserApiClient userApi;
+    protected OrderApiClient orderApi;
     protected String accessToken;
+    protected static final Faker faker = new Faker();
 
     @BeforeEach
     public void setUp() {
-        RestAssured.baseURI = BASE_URL;
+        userApi = new UserApiClient();
+        orderApi = new OrderApiClient();
     }
 
     @AfterEach
     public void tearDown() {
         if (accessToken != null) {
-            deleteUser(accessToken);
+            deleteUser();
         }
     }
 
-    @Step("Создание пользователя")
-    protected Response createUser(UserRequest user) {
-        Response response = given()
-                .header("Content-type", "application/json")
-                .body(user)
-                .when()
-                .post("/auth/register");
-        this.accessToken = response.path("accessToken");
-        return response;
+    // User steps
+    @Step("Создание случайного пользователя")
+    protected UserRequest createRandomUser() {
+        return new UserRequest(
+                faker.internet().emailAddress(),
+                faker.internet().password(8, 16),
+                faker.name().fullName()
+        );
     }
 
-
-    @Step("Удаление пользователя")
-    protected void deleteUser(String accessToken) {
-        given()
-                .header("Authorization", accessToken)
-                .when()
-                .delete("/auth/user")
-                .then()
-                .statusCode(202);
+    @Step("Регистрация пользователя")
+    protected void registerUser(UserRequest user) {
+        userApi.createUser(user);
     }
 
     @Step("Авторизация пользователя")
-    protected Response loginUser(String email, String password){
-        return given()
-                .header("Content-type", "application/json")
-                .body(new AuthRequest(email,password))
-                .when()
-                .post("/auth/login");
+    protected void loginUser(UserRequest user) {
+        this.accessToken = userApi.loginUser(new AuthRequest(user.getEmail(), user.getPassword()))
+                .path("accessToken");
+    }
+
+    @Step("Регистрация и авторизация пользователя")
+    protected void registerAndLoginUser(UserRequest user) {
+        registerUser(user);
+        loginUser(user);
+    }
+
+    @Step("Удаление пользователя")
+    protected void deleteUser() {
+        userApi.deleteUser(accessToken);
     }
 
     @Step("Обновление данных пользователя")
-    protected Response updateUser(String accessToken, UserRequest updateUser){
-        return given()
-                .header("Content-type", "application/json")
-                .header("Authorization", accessToken)
-                .body(updateUser)
-                .when()
-                .patch("/auth/user");
+    protected Response updateUser(UserRequest updateData) {
+        return userApi.updateUser(accessToken, updateData);
     }
 
-    @Step("Получение валидных ингредиентов")
-    protected String[] getBurgerIngredients() {
-        Response response = given()
-                .get("/ingredients");
-
-        String bun = response.jsonPath().getString("data.find { it.type == 'bun' }._id");
-        String main = response.jsonPath().getString("data.find { it.type == 'main' }._id");
-        String sauce = response.jsonPath().getString("data.find { it.type == 'sauce' }._id");
-
-        return new String[]{bun, main, sauce, bun};
-    }
-
+    // Order steps
     @Step("Создание заказа")
-    public Response createOrder(String[] ingredients, String accessToken) {
-        return given()
-                .header("Content-Type", "application/json")
-                .header("Authorization", accessToken)
-                .body(new OrderRequest(ingredients))
-                .when()
-                .post("/orders");
+    protected void createOrder(String[] ingredients, String token) {
+        orderApi.createOrder(ingredients, token)
+                .then()
+                .statusCode(200)
+                .body("success", equalTo(true))
+                .body("order.number", notNullValue());
+    }
+
+    @Step("Получение списка заказов")
+    protected Response getUserOrders(String token) {
+        return orderApi.getUserOrders(token);
+    }
+
+    @Step("Получение ингредиентов")
+    protected String[] getIngredients() {
+        return orderApi.getIngredients();
+    }
+
+    // Verification steps
+    @Step("Проверка успешного ответа")
+    protected void verifySuccessResponse(Response response) {
+        response.then()
+                .statusCode(200)
+                .body("success", equalTo(true));
+    }
+
+    @Step("Проверка ошибки авторизации")
+    protected void verifyAuthError(Response response) {
+        response.then()
+                .statusCode(401)
+                .body("success", equalTo(false))
+                .body("message", equalTo("You should be authorised"));
     }
 }

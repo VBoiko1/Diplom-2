@@ -1,75 +1,76 @@
 import io.restassured.response.Response;
+import model.AuthRequest;
+import model.UserRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.*;
 
 public class UserUpdateTest extends BaseClassTest {
 
     @Test
     @DisplayName("Успешное обновление email авторизованного пользователя")
-    public void updateUserEmailWithAuthSuccess(){
-        UserRequest user = new UserRequest("ALex90@test.ru", "Alex90", "Alexandr");
-        createUser(user);
+    public void updateUserEmailWithAuthSuccess() {
+        UserRequest user = createRandomUser();
+        registerAndLoginUser(user);
 
-        UserRequest updateUser = new UserRequest("alexandr90@test.ru", null,null);
-        Response updateResponse = updateUser(accessToken,updateUser);
+        UserRequest updateData = new UserRequest(faker.internet().emailAddress(), null, null);
+        Response updateResponse = updateUser(updateData);
 
-
+        verifySuccessResponse(updateResponse);
         updateResponse.then()
-                .statusCode(200)
-                .body("success", equalTo(true))
-                .body("user.email", equalTo(updateUser.getEmail().toLowerCase()))
-                .body("user.name", equalTo(user.getName()));
+                .body("user.email", equalTo(updateData.getEmail().toLowerCase()));
     }
 
     @Test
     @DisplayName("Успешное обновление имени авторизованного пользователя")
     public void updateUserNameWithAuthSuccess() {
-        UserRequest user = new UserRequest("vladimir@test.com", "password123", "Vova");
-        createUser(user);
+        UserRequest user = createRandomUser();
+        registerAndLoginUser(user);
 
-        UserRequest updatedUser = new UserRequest(null, null, "Vladimir");
-        Response updateResponse = updateUser(accessToken, updatedUser);
 
+        String newName = faker.name().fullName();
+        UserRequest updateData = new UserRequest(null, null, newName);
+        Response updateResponse = updateUser(updateData);
+
+        verifySuccessResponse(updateResponse);
         updateResponse.then()
-                .statusCode(200)
-                .body("success", equalTo(true))
-                .body("user.name", equalTo(updatedUser.getName()))
+                .body("user.name", equalTo(newName))
                 .body("user.email", equalTo(user.getEmail().toLowerCase()));
     }
 
     @Test
     @DisplayName("Успешное обновление пароля авторизованного пользователя")
     public void updateUserPasswordWithAuthSuccess() {
-        UserRequest user = new UserRequest("viktor88@test.com", "Boiko90", "Viktor");
-        createUser(user);
+        UserRequest user = createRandomUser();
+        registerAndLoginUser(user);
 
-        UserRequest updatedUser = new UserRequest(null, "Boiko123", null);
-        Response updateResponse = updateUser(accessToken, updatedUser);
+        String newPassword = faker.internet().password(10, 16);
+        UserRequest updateData = new UserRequest(null, newPassword, null);
+        Response updateResponse = updateUser(updateData);
 
-        updateResponse.then()
+
+        verifySuccessResponse(updateResponse);
+
+
+        userApi.loginUser(new AuthRequest(user.getEmail(), newPassword))
+                .then()
                 .statusCode(200)
                 .body("success", equalTo(true));
-
-        // Проверяем авторизацию с новым паролем
-        Response loginResponse = loginUser(user.getEmail(), updatedUser.getPassword());
-        loginResponse.then().statusCode(200);
     }
 
     @Test
-    @DisplayName("Обновление данных без авторизации : email")
-    public void updateEmailWithoutAuthFails(){
-        UserRequest user = new UserRequest("Viktor12@test.com", "Boiko78", "Viktor");
-        createUser(user);
+    @DisplayName("Обновление email без авторизации")
+    public void updateEmailWithoutAuthFails() {
+        UserRequest user = createRandomUser();
+        registerAndLoginUser(user);
 
-        UserRequest updateUser = new UserRequest("Viktor89@test.com", null, null);
+        UserRequest updateData = new UserRequest(faker.internet().emailAddress(), null, null);
 
-        // Пытаемся обновить email без авторизации
         given()
                 .header("Content-type", "application/json")
-                .body(updateUser)
+                .body(updateData)
                 .when()
                 .patch("/auth/user")
                 .then()
@@ -79,25 +80,40 @@ public class UserUpdateTest extends BaseClassTest {
     }
 
     @Test
-    @DisplayName("Попытка обновления имени без авторизации")
+    @DisplayName("Обновление имени без авторизации")
     public void updateNameWithoutAuthFails() {
-        UserRequest user = new UserRequest("Timyr12@test.com", "password123", "Timyr");
-        createUser(user);
 
+        UserRequest user = createRandomUser();
+        registerAndLoginUser(user);
 
-        // Пытаемся обновить имя без авторизации
-        UserRequest updatedUser = new UserRequest(null, null, "Anatoliy");
+        UserRequest updateData = new UserRequest(null, null, faker.name().fullName());
 
         given()
                 .header("Content-type", "application/json")
-                .body(updatedUser)
+                .body(updateData)
                 .when()
                 .patch("/auth/user")
                 .then()
                 .statusCode(401)
                 .body("success", equalTo(false))
                 .body("message", equalTo("You should be authorised"));
-
     }
+    @Test
+    @DisplayName("Обновление пароля без авторизации")
+    void updatePasswordWithoutAuthFails() {
+        UserRequest user = createRandomUser();
+        registerAndLoginUser(user);
 
+        UserRequest updateData = new UserRequest(null, faker.internet().password(), null);
+
+        given()
+                .header("Content-type", "application/json")
+                .body(updateData)
+                .when()
+                .patch("/auth/user")
+                .then()
+                .statusCode(401)
+                .body("success", equalTo(false))
+                .body("message", equalTo("You should be authorised"));
+    }
 }
